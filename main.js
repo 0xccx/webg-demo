@@ -1,4 +1,25 @@
 //-----------------------------------------------------------------------------
+// Variables for events
+//-----------------------------------------------------------------------------
+var keys = {};
+var mouseDeltaX = 0, mouseDeltaY = 0;
+var lastX = 0;
+var lastY = 0;
+var lookSpeed = 0.1;
+
+// temp variable
+var elapsed = 0;
+
+var camera = {};
+camera.position = [0.0, 0.0, 6.0];
+camera.inversePosition = vec3.create();
+camera.heading = 0;
+camera.pitch = 0;
+camera.speed = 0.02;
+camera.sensitivity = 10;
+camera.disable = false;
+
+//-----------------------------------------------------------------------------
 // Create our geometry
 //-----------------------------------------------------------------------------
 //var torus = new Torus(.4, .2, 10, 10);
@@ -11,11 +32,14 @@ var proj              = mat4.create();
 var viewMatrix        = mat4.create();
 var normalMatrix      = mat3.create();
 
+var testViewMatrix    = mat4.create();
+var testViewRotationY = mat4.create();
+
 
 //-----------------------------------------------------------------------------
 // Settings for shader program
 //-----------------------------------------------------------------------------
-var eyePos           = vec3.fromValues(0, 0, 3);
+var eyePos           = vec3.fromValues(0, 0, 6);
 var lightPos         = vec3.fromValues(1, 1, 2);
 
 // настроим точечный источник освещения
@@ -83,8 +107,19 @@ gl.uniform3fv(gl.getUniformLocation(prTexProgram, "uLightPosition"), lightPositi
 var angleX = 0;
 var angleY = 0;
 
+
 function draw(time) {
     resize();
+    cameraMove();
+
+    vec3.negate(camera.inversePosition, camera.position);
+
+    mat4.identity(testViewMatrix);
+    mat4.rotate(testViewMatrix, testViewMatrix, TO_RADIANS(camera.pitch), [1, 0, 0]);
+    mat4.rotate(testViewMatrix, testViewMatrix, TO_RADIANS(camera.heading), [0, 1, 0]);
+    mat4.translate(testViewMatrix, testViewMatrix, camera.inversePosition);
+
+    //rotationAngle();
     // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear COLOR and DEPTH BUFFE
@@ -94,9 +129,10 @@ function draw(time) {
     angleY += 0.006;
 
 
+
     // compute common view projection matrix
     var vp = mat4.create();
-    mat4.mul(vp, proj, viewMatrix);
+    mat4.mul(vp, proj, testViewMatrix);
 
 
 //-----------------------------------------------------------------------------
@@ -218,4 +254,132 @@ function resize()
     gl.viewport(0, 0, width, height);
     mat4.perspective(proj, Math.PI/2, width/height, 0.1, 1000);
 }
+
+//-----------------------------------------------------------------------------
+// Handle User Input
+//-----------------------------------------------------------------------------
+
+function initPointerLock() {
+  // Start by going fullscreen with the element.  Current implementations
+  // require the element to be in fullscreen before requesting pointer
+  // lock--something that will likely change in the future.
+  canvas.requestFullscreen = canvas.requestFullscreen    ||
+                             canvas.mozRequestFullscreen ||
+                             canvas.mozRequestFullScreen || // Older API upper case 'S'.
+                             canvas.webkitRequestFullscreen;
+  canvas.addEventListener('click', canvas.requestFullscreen, false);
+
+  document.addEventListener('fullscreenchange', fullscreenChange, false);
+  document.addEventListener('mozfullscreenchange', fullscreenChange, false);
+  document.addEventListener('webkitfullscreenchange', fullscreenChange, false);
+
+  document.addEventListener('pointerlockchange', pointerLockChange, false);
+  document.addEventListener('mozpointerlockchange', pointerLockChange, false);
+  document.addEventListener('webkitpointerlockchange', pointerLockChange, false);
+}
+
+function fullscreenChange() {
+  if ( document.webkitFullscreenElement === canvas ||
+       document.mozFullscreenElement === canvas ||
+       document.mozFullScreenElement === canvas ) { // Older API upper case 'S'.
+    // Element is fullscreen, now we can request pointer lock
+    canvas.requestPointerLock = canvas.requestPointerLock    ||
+                                canvas.mozRequestPointerLock ||
+                                canvas.webkitRequestPointerLock;
+    canvas.requestPointerLock();
+    gl.viewportWidth = canvas.width = window.innerWidth;
+    gl.viewportHeight = canvas.height = window.innerHeight;
+  }
+}
+
+function pointerLockChange( e ){
+  if ( document.pointerLockElement === canvas ||
+       document.mozPointerLockElement === canvas ||
+       document.webkitPointerLockElement === canvas )
+  {
+    document.addEventListener("mousemove", moveCallback, false);
+  }
+  else{
+    document.removeEventListener("mousemove", moveCallback, false);
+  }
+}
+
+function moveCallback( e ){
+  if( !camera.disable ){
+    var movementX = e.movementX       ||
+                    e.mozMovementX    ||
+                    e.webkitMovementX ||
+                    0,
+        movementY = e.movementY       ||
+                    e.mozMovementY    ||
+                    e.webkitMovementY ||
+                    0;
+
+  camera.heading += movementX / camera.sensitivity;
+  camera.pitch += movementY / camera.sensitivity;
+
+    if( camera.pitch < -90 )
+	camera.pitch = -90;
+    if( camera.pitch > 90 )
+	camera.pitch = 90;
+    if( camera.heading < -180 )
+	camera.heading += 360
+    if( camera.heading > 180 )
+	camera.heading -= 360
+  }
+}
+
+function cameraMove(){
+  var distance = 1.0 * camera.speed;
+  var camX = 0, camZ = 0;
+  var pitchFactor = 1;//Math.cos( degToRad( app.camera.pitch ) );
+  // forward
+  if (keys['87']) {
+    camX += distance * Math.sin( TO_RADIANS( camera.heading ) ) * pitchFactor;
+    camZ += distance * Math.cos( TO_RADIANS( camera.heading ) ) * pitchFactor * -1.0;
+  }
+  // backward
+  if( keys['83'] ){
+    camX += distance * Math.sin( TO_RADIANS( camera.heading ) ) * pitchFactor * -1.0;
+    camZ += distance * Math.cos( TO_RADIANS( camera.heading ) ) * pitchFactor;
+  }
+  // strafing right
+  if( keys['68'] ){
+    camX += distance * Math.cos( TO_RADIANS( camera.heading ) );
+    camZ += distance * Math.sin( TO_RADIANS( camera.heading ) );
+  }
+  // strafing left
+  if( keys['65'] ){
+    camX += -distance * Math.cos( TO_RADIANS( camera.heading ) );
+    camZ += -distance * Math.sin( TO_RADIANS( camera.heading ) );
+  }
+
+  if( camX > distance )
+    camX = distance;
+  if( camX < -distance )
+    camX = -distance;
+  if( camZ > distance )
+    camZ = distance;
+  if( camZ < -distance )
+    camZ = -distance;
+
+    // set X component of vec3
+  camera.position[ 0 ] += camX;
+  // set Z compoment of vec3
+  camera.position[ 2 ] += camZ;
+}
+
+initPointerLock();
+
+// EVENTS
+
+window.addEventListener('keydown', function(e) {
+    keys[e.keyCode] = true;
+    e.preventDefault();
+});
+
+window.addEventListener('keyup', function(e) {
+    keys[e.keyCode] = false;
+    e.preventDefault();
+});
 
