@@ -26,6 +26,9 @@ camera.disable = false;
 var torus = new Torus(0.35, 0.15, 30, 30);
 var plane = new Plane(5, 5,  4, 4);
 var sphere = new Sphere();
+sphere.object2world = mat4.create();
+
+var aabb = new AABB(sphere);
 
 
 var proj              = mat4.create();
@@ -64,6 +67,7 @@ const materialShininess = 20.0;
 //-----------------------------------------------------------------------------
 const lightProgram = initShaders(gl, 'basic_vertex.glsl', 'basic_fragment.glsl')
 const prTexProgram = initShaders(gl, 'pr_tex_vertex.glsl', 'pr_tex_fragment.glsl')
+const bboxProgram = initShaders(gl, 'bbox_vertex.glsl', 'bbox_fragment.glsl');
 
 
 //-----------------------------------------------------------------------------
@@ -187,6 +191,7 @@ function draw(time) {
     // M' = M * S ==> M =  T * R * S
     mat4.mul(sphereM, sphereTranslateMatrix, sphereRotateMatrix);
     mat4.mul(sphereM, sphereM, sphereScaleMatrix);
+    sphere.object2world = sphereM;
     var sphereMVP = mat4.create();
     mat4.mul(sphereMVP, vp, sphereM);
     // compute normal matrix
@@ -226,6 +231,24 @@ function draw(time) {
     gl.uniformMatrix3fv(gl.getUniformLocation(prTexProgram, "uNormal"), false, planeNormalMatrix);
     gl.uniform1f(gl.getUniformLocation(prTexProgram, "u_time"), time * 0.001);
     plane.render();
+
+
+//-----------------------------------------------------------------------------
+// AABB render
+//-----------------------------------------------------------------------------
+
+    var m = mat4.create();
+    mat4.mul(m, sphere.object2world, aabb.transform);
+    var aabbMVP = mat4.create();
+    mat4.mul(aabbMVP, vp, m);
+
+    gl.useProgram(bboxProgram);
+    gl.uniformMatrix4fv(gl.getUniformLocation(bboxProgram, "uMVP"), false, aabbMVP);
+
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(1, 0);
+    aabb.render();
+
 
     requestAnimationFrame(draw);
 }
